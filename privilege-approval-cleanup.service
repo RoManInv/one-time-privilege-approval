@@ -1,0 +1,8 @@
+[Unit]
+Description=Clean old privilege approval history
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/libexec/privilege-approval/cleanup_history.py
+User=root
+Group=root

@@ -1,0 +1,9 @@
+[Unit]
+Description=Start privilege approval checker when pending requests exist
+
+[Path]
+DirectoryNotEmpty=/var/lib/privilege-approval/pending
+Unit=privilege-approval-check.service
+
+[Install]
+WantedBy=multi-user.target

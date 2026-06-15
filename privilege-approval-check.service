@@ -1,0 +1,14 @@
+[Unit]
+Description=Check requester mailboxes for privilege approval replies
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/libexec/privilege-approval/check_replies.py --loop
+User=root
+Group=root
+
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=full
+ReadWritePaths=/var/lib/privilege-approval /var/log/privilege-approval
+NoNewPrivileges=no

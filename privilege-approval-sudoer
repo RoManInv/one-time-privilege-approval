@@ -1,0 +1,11 @@
+Defaults:%privilege-requesters timestamp_timeout=0
+Defaults:%privilege-requesters env_reset,secure_path="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Defaults:%privilege-requesters log_input,log_output,iolog_dir="/var/log/sudo-io/privilege-approval/%{user}"
+
+Cmnd_Alias LIMITED_CMDS = \
+    /usr/bin/python3 /usr/local/libexec/privilege-approval/request_backend.py *, \
+    /usr/bin/python3 /usr/local/libexec/privilege-approval/run_backend.py *, \
+    /usr/bin/local/request-privilege, \
+    /usr/bin/local/run-approved
+
+%privilege-requesters ALL=(root) NOPASSWD: LIMITED_CMDS

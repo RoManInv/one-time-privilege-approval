@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily privilege approval history cleanup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+Unit=privilege-approval-cleanup.service
+
+[Install]
+WantedBy=timers.target
