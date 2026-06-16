@@ -13,10 +13,10 @@ The two non-sudo user-side commands are:
 * run-approved [ID] [digest] [OTP]
 
 The pipeline of this project is as follows:
-1. Non-sudo user applies to run a command with sudo privilege using `request-privilege` command
+1. Non-sudo user applies to run command with sudo privilege using `request-privilege` command
 2. The system sends an email to the specified address, listing the absolute-path style commands in the order claimed by the non-sudo user, the approval string and the rejection string.
 3. The system administrator replies to the email with the approval string plus the appointed TOTP or rejection string.
-4. Upon receiving an approval email, the system checks if the ID and the digest match and if the TOTP is valid. 
+4. Upon receiving an approval email, the system checks if the ID and the digest match, and if the TOTP is valid. 
 5. Once the check is passed, the non-sudo user uses `run-approved` to invoke the system-owned sudo broker to run the listed commands with sudo privilege
 
 ## Installation
@@ -28,11 +28,11 @@ Use `sudo apt install` to install the following required packages:
 * oathtool
 * jq
 
-Additionally, the non-sudo user group that has access to `request-approval` and `run-approved` commands is hardcoded as `privilege-requesters`. Create this user group with 
+Additionally, the non-sudo user group that has access to `request-approval` and `run-approved` commands is hardcoded `privilege-requesters`. Create this user group with 
 ```bash
 sudo groupadd --system privilege-requesters
 ```
-and add the existing user to this group to enable their access.
+and add the existing user into this group to enable their access.
 
 The project requires the following directories. Create them using the following commands:
 ```bash
@@ -49,6 +49,8 @@ sudo install -d -o root -g root -m 0750 /var/lib/privilege-approval/locks
 
 sudo install -d -o root -g root -m 0750 /var/log/privilege-approval
 sudo install -d -o root -g root -m 0700 /var/log/sudo-io/privilege-approval
+
+sudo install -d -o root -g root -m 0750 /etc/privilege-approval/users.d
 ```
 
 ## Configurations
@@ -59,10 +61,7 @@ sudo chown root:root /etc/privilege-approval/config.env
 sudo chmod 0640 /etc/privilege-approval/config.env
 ```
 
-**User configuration.** Edit the file `user-config.env` to configure user email, SMTP and IMAP entries, and basic configs, then copy the content into `~/.config/privilege-approval/email.env`, finally protect the file by changing the ownership and mod. The ownership of this file must be the non-sudo user.
-```bash
-chmod 0600 ~/.config/privilege-approval/email.env
-```
+**User configuration.** Edit the file `user-config.env` to configure user email. Then create a file `<username>.env` under `/etc/privilege-approval/users.d` with the content the edited `user-config.env`.
 
 ## Create TOTP
 
@@ -82,7 +81,7 @@ sudo chown root:root /etc/privilege-approval/totp.secret
 sudo chmod 0600 /etc/privilege-approval/totp.secret
 ```
 
-Copy the secret to the administrator's authenticator app, and test it by comparing the OTP on the app and the one returned by the following command:
+Copy the secret to the administrator's authencator app, and test it by comparing the OTP on the app and the one returned by the following command:
 ```bash
 sudo oathtool --totp -b "$(sudo cat /etc/privilege-approval/totp.secret)"
 ```
@@ -114,8 +113,8 @@ sudo chmod 0755 /usr/local/libexec/privilege-approval/run_backend.py
 sudo chown root:root /usr/local/bin/request-privilege /usr/local/bin/run-approved
 sudo chmod 0755 /usr/local/bin/request-privilege /usr/local/bin/run-approved
 ```
-6. Edit the sudoers profile for the `privilege-requesters` group with `sudo visudo -f /etc/sudoers.d/privilege-approval` command. Copy the content in `privilege-approval-sudoer` into this profile.
-7. Create a privilege approval checker service by copying the content in `privilege-approval-check.service` into `/etc/systemd/system/privilege-approval-check.service` and the content in `privilege-approval-check.path` into `/etc/systemd/system/privilege-approval-check.path`, then enable the service with
+6. Edit the sudoers profile for `privilege-requesters` group with `sudo visudo -f /etc/sudoers.d/privilege-approval` command. Copy the content in `privilege-approval-sudoer` into this profile.
+7. Create privilege approval checker service by copying the content in `privilege-approval-check.service` into `/etc/systemd/system/privilege-approval-check.service` and the content in `privilege-approval-check.path` into `/etc/systemd/system/privilege-approval-check.path`, then enable the service with
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now privilege-approval-check.path
@@ -133,9 +132,9 @@ sudo systemctl enable --now privilege-approval-cleanup.timer
 
 ## Upcoming Changes
 
-The OTP for the `run-approved` command seems unnecessary. Once a request is approved, the system should create a random, dedicated OTP that does not change over time and send it to the requester, so that the requester does not need to consume the approval immediately due to the OTP expiration. However, a time frame should also be specified after a request is approved. If the approval is not consumed within the time limit, it will expire.
+The OTP for run-approved command seems unnecessary. Once a request is approved, the system should create a random, dedicated OTP that does not change over time and send it to the requester, so that the requester does not need to consume the approval immediately due to the OTP expiration. However, a time frame should also be specified after a request is approved. If the approval is not consumed within the time limit, it will expire.
 
-Such tedious installation steps scream for an installation and uninstallation script.
+Such tedious installation steps screams for a installation and uninstallation script.
 
 A administrator-side and user-side configuration prompt is also useful.
 
