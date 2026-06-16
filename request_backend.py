@@ -5,7 +5,6 @@ import pwd
 import shlex
 import shutil
 import smtplib
-import subprocess
 import sys
 import time
 import uuid
@@ -18,7 +17,7 @@ from common import (
     PENDING,
     SECURE_PATH,
     global_env,
-    load_user_email_config,
+    load_user_profile,
     cfg_int,
     approval_hash,
     safe_request_id,
@@ -70,7 +69,6 @@ def parse_command_line(line, current_cwd, allow_shells):
     if not parts:
         return None, current_cwd
 
-    # In file mode, allow cd to set cwd for following commands.
     if parts[0] == "cd":
         if len(parts) != 2:
             die(f"cd line must be exactly: cd <directory>\nline: {original}")
@@ -79,7 +77,6 @@ def parse_command_line(line, current_cwd, allow_shells):
             new_cwd = os.path.abspath(os.path.join(current_cwd, new_cwd))
         return {"type": "cwd", "original": original, "cwd": new_cwd}, new_cwd
 
-    # User may write sudo or not.
     if parts[0] == "sudo":
         parts = parts[1:]
         if not parts:
@@ -126,22 +123,19 @@ def clamp_retention(requested, env):
 
     return max(min_days, min(max_days, int(requested)))
 
-def send_request_email(username, subject, body):
+def send_system_email(to_addr, subject, body):
     g = global_env()
-    u = load_user_email_config(username)
 
-    approver = g["APPROVER_EMAIL"]
+    smtp_host = g.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(g.get("SMTP_PORT", "587"))
 
-    smtp_host = u.get("SMTP_HOST") or g.get("DEFAULT_SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(u.get("SMTP_PORT") or g.get("DEFAULT_SMTP_PORT", "587"))
-
-    smtp_from = u["SMTP_FROM"]
-    smtp_user = u["SMTP_USER"]
-    smtp_password = u["SMTP_APP_PASSWORD"]
+    smtp_from = g["WORKFLOW_EMAIL_ADDRESS"]
+    smtp_user = g["WORKFLOW_EMAIL_USER"]
+    smtp_password = g["WORKFLOW_EMAIL_APP_PASSWORD"]
 
     msg = EmailMessage()
     msg["From"] = smtp_from
-    msg["To"] = approver
+    msg["To"] = to_addr
     msg["Reply-To"] = smtp_from
     msg["Subject"] = subject
     msg.set_content(body)
@@ -163,6 +157,14 @@ def main():
     timeout_sec = cfg_int(g, "REQUEST_TIMEOUT_SEC", 3600)
 
     requester, requester_uid, requester_gid = real_request_user()
+    user_profile = load_user_profile(requester)
+
+    tz = g.get("TZ", "UTC")
+    try:
+        ZoneInfo(tz)
+    except Exception:
+        tz = "UTC"
+    
     pw = pwd.getpwnam(requester)
     request_cwd = os.environ.get("PWD") or pw.pw_dir
     if not request_cwd.startswith("/"):
@@ -196,6 +198,7 @@ def main():
             "requester": requester,
             "requester_uid": requester_uid,
             "requester_gid": requester_gid,
+            "requester_notify_to": user_profile["NOTIFY_TO"],
             "request_cwd": request_cwd,
             "created_at_epoch": now,
             "expires_at_epoch": expires_at,
@@ -214,7 +217,7 @@ def main():
     target = PENDING / f"{request_id}.json"
     atomic_write_json(target, manifest)
 
-    expires_utc = datetime.fromtimestamp(expires_at, timezone.utc).astimezone(ZoneInfo("Europe/Berlin")).strftime("%Y-%m-%d %H:%M:%S %Z")
+    expires_utc = datetime.fromtimestamp(expires_at, timezone.utc).astimezone(ZoneInfo(tz)).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     command_text = "\n".join(
         f"{i + 1}. cwd={cmd['cwd']} :: {' '.join(shlex.quote(x) for x in cmd['argv'])}"
@@ -227,6 +230,9 @@ def main():
 
 Requester:
 {requester}
+
+Requester notification email:
+{user_profile["NOTIFY_TO"]}
 
 Request ID:
 {request_id}
@@ -245,27 +251,33 @@ Commands, in exact execution order:
 
 To approve, reply with exactly one line:
 
-APPROVE {request_id} {digest} <6-digit-OTP>
+APPROVE {request_id} {digest} <6-digit-admin-OTP>
 
 To reject, reply with exactly one line:
 
 REJECT {request_id} {digest}
 
+Important:
+- Reply to this workflow mailbox, not to the requester.
+- The administrator OTP is used only for approval.
+- If approved, the system will generate a separate one-time run password and email it to the requester.
+
 Do not approve if the command list, request ID, or digest is not exactly expected.
 """
 
-    send_request_email(requester, subject, body)
+    send_system_email(g["APPROVER_EMAIL"], subject, body)
 
     print(f"request_id={request_id}")
     print(f"sha256={digest}")
     print(f"expires_at={expires_utc}")
     print()
-    print("The administrator should reply to the request email with either:")
-    print(f"  APPROVE {request_id} {digest} <OTP>")
+    print("The administrator should reply to the workflow email with either:")
+    print(f"  APPROVE {request_id} {digest} <ADMIN_OTP>")
     print(f"  REJECT {request_id} {digest}")
     print()
-    print("After approval, run:")
-    print(f"  run-approved {request_id} {digest} <OTP>")
+    print("After approval, the system will email you a one-time run password.")
+    print("Then run:")
+    print(f"  run-approved {request_id} {digest} <RUN_PASSWORD>")
 
 if __name__ == "__main__":
     main()

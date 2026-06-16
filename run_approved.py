@@ -11,13 +11,12 @@ from common import (
     APPROVED,
     RUNNING,
     DONE,
+    REJECTED,
     LOG_DIR,
     SECURE_PATH,
-    global_env,
-    cfg_int,
     approval_hash,
     atomic_write_json,
-    verify_totp,
+    verify_run_password,
     acquire_lock,
     release_lock,
 )
@@ -28,6 +27,20 @@ def die(msg, code=1):
 
 def current_user():
     return os.environ.get("SUDO_USER") or "root"
+
+def move_to_rejected(path, manifest, reason):
+    rid = manifest["approval"]["request_id"]
+    manifest["state"]["status"] = "rejected"
+    manifest["state"]["reason"] = reason
+    manifest["state"]["rejected_at_epoch"] = int(time.time())
+
+    atomic_write_json(path, manifest)
+
+    target = REJECTED / f"{rid}.{reason}.json"
+    if target.exists():
+        target = REJECTED / f"{rid}.{reason}.{int(time.time())}.json"
+
+    os.replace(path, target)
 
 def make_sudo_like_env(manifest, argv):
     approval = manifest["approval"]
@@ -90,12 +103,12 @@ def main():
     parser = argparse.ArgumentParser(prog="run-approved")
     parser.add_argument("request_id")
     parser.add_argument("sha256")
-    parser.add_argument("otp")
+    parser.add_argument("run_password")
     args = parser.parse_args()
 
     rid = args.request_id
     claimed_digest = args.sha256.lower()
-    otp = args.otp
+    supplied_run_password = args.run_password
 
     lock = None
 
@@ -108,6 +121,7 @@ def main():
 
         manifest = json.loads(approved_path.read_text(encoding="utf-8"))
         approval = manifest["approval"]
+        state = manifest["state"]
 
         requester = approval["requester"]
         invoker = current_user()
@@ -119,17 +133,40 @@ def main():
         if claimed_digest != actual_digest:
             die("SHA256 digest does not match this approved request")
 
-        g = global_env()
-        past_sec = cfg_int(g, "TOTP_ACCEPT_PAST_SEC", 240)
-        future_sec = cfg_int(g, "TOTP_ACCEPT_FUTURE_SEC", 30)
+        now = int(time.time())
+        run_expires_at = int(state.get("run_password_expires_at_epoch", 0))
 
-        if not verify_totp(otp, past_sec=past_sec, future_sec=future_sec):
-            die("bad or expired OTP")
+        if not run_expires_at or now > run_expires_at:
+            move_to_rejected(approved_path, manifest, "expired-after-approval")
+            die("approved request expired before execution")
+
+        salt = state.get("run_password_salt", "")
+        expected_hash = state.get("run_password_hash", "")
+
+        if not salt or not expected_hash:
+            move_to_rejected(approved_path, manifest, "missing-run-password-hash")
+            die("approved request is missing run-password metadata")
+
+        if not verify_run_password(supplied_run_password, salt, expected_hash):
+            state["failed_run_password_attempts"] = int(state.get("failed_run_password_attempts", 0)) + 1
+            max_attempts = int(state.get("max_run_password_attempts", 5))
+
+            if state["failed_run_password_attempts"] >= max_attempts:
+                move_to_rejected(approved_path, manifest, "too-many-bad-run-password")
+                die("bad run password; request rejected after too many failed attempts")
+
+            atomic_write_json(approved_path, manifest)
+            die(f"bad run password; failed attempts={state['failed_run_password_attempts']}/{max_attempts}")
 
         # Consume before execution to prevent replay.
         running_path = RUNNING / f"{rid}.json"
-        manifest["state"]["status"] = "running"
-        manifest["state"]["started_at_epoch"] = int(time.time())
+        state["status"] = "running"
+        state["started_at_epoch"] = int(time.time())
+
+        # Remove password verifier before storing the running/done record.
+        state.pop("run_password_salt", None)
+        state.pop("run_password_hash", None)
+
         atomic_write_json(approved_path, manifest)
         os.replace(approved_path, running_path)
 
@@ -154,10 +191,10 @@ def main():
             log.write(f"SUCCESS: {success}\n")
 
         done_path = DONE / f"{rid}.json"
-        manifest["state"]["status"] = "done"
-        manifest["state"]["success"] = success
-        manifest["state"]["exit_code"] = exit_code
-        manifest["state"]["finished_at_epoch"] = int(time.time())
+        state["status"] = "done"
+        state["success"] = success
+        state["exit_code"] = exit_code
+        state["finished_at_epoch"] = int(time.time())
 
         atomic_write_json(running_path, manifest)
         os.replace(running_path, done_path)

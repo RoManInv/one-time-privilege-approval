@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic privilege approval checker safety net
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=privilege-approval-check.service
+
+[Install]
+WantedBy=timers.target

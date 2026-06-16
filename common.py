@@ -5,6 +5,7 @@ import hmac
 import json
 import os
 import pwd
+import secrets
 import struct
 import time
 from pathlib import Path
@@ -19,6 +20,7 @@ LOCKS = BASE / "locks"
 
 LOG_DIR = Path("/var/log/privilege-approval")
 CONFIG = Path("/etc/privilege-approval/config.env")
+USERS_DIR = Path("/etc/privilege-approval/users.d")
 TOTP_SECRET = Path("/etc/privilege-approval/totp.secret")
 
 SECURE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -28,6 +30,7 @@ def load_env_file(path):
     p = Path(path)
     if not p.exists():
         return env
+
     for line in p.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -48,21 +51,25 @@ def cfg_int(env, key, default):
 def user_home(username):
     return Path(pwd.getpwnam(username).pw_dir)
 
-def user_email_config_path(username):
-    return user_home(username) / ".config" / "privilege-approval" / "email.env"
+def user_profile_path(username):
+    safe = safe_request_id(username)
+    return USERS_DIR / f"{safe}.env"
 
-def load_user_email_config(username):
-    path = user_email_config_path(username)
+def load_user_profile(username):
+    path = user_profile_path(username)
+    if not path.exists():
+        raise RuntimeError(f"missing user profile: {path}")
+
     st = path.stat()
+    if st.st_uid != 0:
+        raise RuntimeError(f"{path} must be owned by root")
+    if st.st_mode & 0o022:
+        raise RuntimeError(f"{path} must not be group/world writable")
 
-    # Require user-owned config and no group/other access.
-    pw = pwd.getpwnam(username)
-    if st.st_uid != pw.pw_uid:
-        raise RuntimeError(f"{path} must be owned by {username}")
-    if st.st_mode & 0o077:
-        raise RuntimeError(f"{path} must be chmod 0600")
-
-    return load_env_file(path)
+    env = load_env_file(path)
+    if not env.get("NOTIFY_TO"):
+        raise RuntimeError(f"{path} must define NOTIFY_TO")
+    return env
 
 def canonical_bytes(obj):
     return json.dumps(
@@ -115,6 +122,17 @@ def verify_totp(code, past_sec=240, future_sec=30):
             return True
 
     return False
+
+def generate_run_password(nbytes=24):
+    return secrets.token_urlsafe(nbytes)
+
+def run_password_hash(password, salt):
+    data = (salt + ":" + password).encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+
+def verify_run_password(password, salt, expected_hash):
+    actual = run_password_hash(password, salt)
+    return hmac.compare_digest(actual, expected_hash)
 
 def acquire_lock(request_id):
     lock_path = LOCKS / f"{request_id}.lock"
