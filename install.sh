@@ -100,14 +100,28 @@ validate_project_files() {
 }
 
 install_packages_if_needed() {
-    if ! command -v python3 >/dev/null 2>&1; then
+    local need_update="no"
+
+    for cmd in python3 visudo systemctl qrencode; do
+        if ! command -v "${cmd}" >/dev/null 2>&1; then
+            need_update="yes"
+        fi
+    done
+
+    if [[ "${need_update}" == "yes" ]]; then
         apt-get update
+    fi
+
+    if ! command -v python3 >/dev/null 2>&1; then
         apt-get install -y python3
     fi
 
     if ! command -v visudo >/dev/null 2>&1; then
-        apt-get update
         apt-get install -y sudo
+    fi
+
+    if ! command -v qrencode >/dev/null 2>&1; then
+        apt-get install -y qrencode
     fi
 
     if ! command -v systemctl >/dev/null 2>&1; then

@@ -18,6 +18,51 @@ escape_value() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+urlencode() {
+    python3 - "$1" <<'PY'
+import sys
+from urllib.parse import quote
+print(quote(sys.argv[1], safe=""))
+PY
+}
+
+show_totp_qr() {
+    local issuer="$1"
+    local account="$2"
+    local secret="$3"
+
+    local issuer_enc
+    local account_enc
+    local label
+    local uri
+
+    issuer_enc="$(urlencode "${issuer}")"
+    account_enc="$(urlencode "${account}")"
+
+    label="${issuer_enc}:${account_enc}"
+    uri="otpauth://totp/${label}?secret=${secret}&issuer=${issuer_enc}&algorithm=SHA1&digits=6&period=30"
+
+    echo
+    echo "Scan this QR code with your authenticator app:"
+    echo
+
+    if command -v qrencode >/dev/null 2>&1; then
+        qrencode -t ANSIUTF8 "${uri}"
+    else
+        echo "WARNING: qrencode is not installed; cannot display QR code."
+        echo "Install it with: sudo apt install qrencode"
+    fi
+
+    echo
+    echo "Manual setup values:"
+    echo "  Issuer: ${issuer}"
+    echo "  Account: ${account}"
+    echo "  Secret: ${secret}"
+    echo "  Type: TOTP"
+    echo "  Digits: 6"
+    echo "  Period: 30 seconds"
+}
+
 write_kv() {
     local key="$1"
     local value="$2"
@@ -197,14 +242,9 @@ main() {
     echo "  ${TOTP_FILE}"
     echo
     echo "Add this TOTP secret to the administrator's authenticator app:"
-    echo
-    echo "  Issuer: Ubuntu24-PrivilegeApproval"
-    echo "  Account: ${APPROVER_EMAIL}"
-    echo "  Secret: ${TOTP_SECRET}"
-    echo "  Type: TOTP"
-    echo "  Digits: 6"
-    echo "  Period: 30 seconds"
-    echo
+
+    show_totp_qr "Ubuntu24-PrivilegeApproval" "${APPROVER_EMAIL}" "${TOTP_SECRET}"
+
     echo "You can later edit config with:"
     echo "  sudo request-privilege config show"
     echo "  sudo request-privilege config set KEY VALUE"
