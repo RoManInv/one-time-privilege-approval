@@ -2,6 +2,8 @@
 
 **This project is under development and only provide a very naive, hardcoded sketch for the core functionality. Discussion is welcomed but no change are guaranteed. The author accepts no feature requests or suggestions until fully completed.**
 
+**This readme is not changed for the installer/uninstaller version, as the entire project is still under test.**
+
 ## Description
 
 One-Time Privilege Approval (OTPA) aims to create a channel for non-sudo users to apply for an one-time approval of executing commands with sudo privilege. 
