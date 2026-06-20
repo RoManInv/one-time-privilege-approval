@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LIBEXEC_DIR="/usr/local/libexec/privilege-approval"
+
+run_root_backend() {
+    if [[ "${EUID}" -eq 0 ]]; then
+        exec /usr/bin/python3 "$@"
+    else
+        exec sudo -n /usr/bin/python3 "$@"
+    fi
+}
+
+case "${1:-}" in
+    admininit)
+        shift
+        if [[ "${EUID}" -ne 0 ]]; then
+            echo "ERROR: admin initialization requires root." >&2
+            echo "Run: sudo request-privilege admininit" >&2
+            exit 1
+        fi
+        exec "${LIBEXEC_DIR}/admin-init.sh" "$@"
+        ;;
+
+    init)
+        shift
+        if [[ "${EUID}" -eq 0 ]]; then
+            echo "ERROR: user initialization must be run as the normal requester, not with sudo." >&2
+            echo "Run: request-privilege init" >&2
+            exit 1
+        fi
+        exec "${LIBEXEC_DIR}/user-init.sh" "$@"
+        ;;
+
+    config)
+        shift
+        run_root_backend "${LIBEXEC_DIR}/admin_config_backend.py" "$@"
+        ;;
+
+    notify)
+        shift
+        run_root_backend "${LIBEXEC_DIR}/notify_backend.py" "$@"
+        ;;
+
+    *)
+        run_root_backend "${LIBEXEC_DIR}/request_backend.py" "$@"
+        ;;
+esac

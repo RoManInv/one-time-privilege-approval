@@ -144,3 +144,32 @@ def release_lock(lock_path):
         os.rmdir(lock_path)
     except Exception:
         pass
+
+def save_env_file(path, env, mode=0o640):
+    path = Path(path)
+    tmp = path.with_name("." + path.name + ".tmp")
+
+    lines = []
+    for k in sorted(env.keys()):
+        v = str(env[k])
+        v = v.replace("\\", "\\\\").replace('"', '\\"')
+        lines.append(f'{k}="{v}"')
+
+    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+def mask_secret(value):
+    if not value:
+        return ""
+    if len(value) <= 4:
+        return "****"
+    return value[:2] + "****" + value[-2:]
+
+def require_real_user():
+    user = os.environ.get("SUDO_USER")
+    uid = os.environ.get("SUDO_UID")
+    gid = os.environ.get("SUDO_GID")
+    if not user or not uid or not gid:
+        raise RuntimeError("must be invoked through sudo wrapper")
+    return user, int(uid), int(gid)
