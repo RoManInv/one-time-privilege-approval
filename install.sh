@@ -137,8 +137,8 @@ create_group() {
 }
 
 install_dirs() {
-    install -d -o root -g root -m 0750 "${LIBEXEC_DIR}"
-    install -d -o root -g root -m 0750 "${ETC_DIR}"
+    install -d -o root -g ${GROUP_NAME} -m 0750 "${LIBEXEC_DIR}"
+    install -d -o root -g ${GROUP_NAME} -m 0750 "${ETC_DIR}"
     install -d -o root -g root -m 0750 "${USERS_DIR}"
 
     install -d -o root -g root -m 0750 "${STATE_DIR}"

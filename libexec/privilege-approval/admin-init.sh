@@ -151,6 +151,7 @@ main() {
     local MAX_RETENTION_DAYS
     local ALLOW_SHELL_COMMANDS
     local POLL_INTERVAL_SEC
+    local TZ
 
     APPROVER_EMAIL="$(prompt "APPROVER_EMAIL" "")"
     WORKFLOW_EMAIL_ADDRESS="$(prompt "WORKFLOW_EMAIL_ADDRESS" "")"
@@ -176,6 +177,8 @@ main() {
     DEFAULT_RETENTION_DAYS="$(prompt "DEFAULT_RETENTION_DAYS" "30")"
     MIN_RETENTION_DAYS="$(prompt "MIN_RETENTION_DAYS" "7")"
     MAX_RETENTION_DAYS="$(prompt "MAX_RETENTION_DAYS" "365")"
+
+    TZ="$(prompt "TIMEZONE" "UTC")"
 
     while true; do
         ALLOW_SHELL_COMMANDS="$(prompt "ALLOW_SHELL_COMMANDS" "no")"
@@ -217,6 +220,8 @@ main() {
 
     write_kv "ALLOW_SHELL_COMMANDS" "${ALLOW_SHELL_COMMANDS}"
     write_kv "POLL_INTERVAL_SEC" "${POLL_INTERVAL_SEC}"
+
+    write_kv "TIMEZONE" "${TZ}"
 
     chown root:root "${CONFIG_FILE}.tmp"
     mv "${CONFIG_FILE}.tmp" "${CONFIG_FILE}"

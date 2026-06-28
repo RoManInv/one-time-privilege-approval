@@ -89,7 +89,7 @@ def cmd_set(args):
 
     token = generate_run_password(24)
     salt = generate_run_password(16)
-    # expires_at = int(time.time()) + VERIFY_TIMEOUT_SEC
+    expires_at = int(time.time()) + VERIFY_TIMEOUT_SEC
 
     tz = g.get("TZ", "UTC")
     try:
@@ -155,7 +155,10 @@ def cmd_verify(args):
     pending_email = env.get("PENDING_NOTIFY_TO")
     salt = env.get("PENDING_TOKEN_SALT")
     expected_hash = env.get("PENDING_TOKEN_HASH")
-    expires_at = int(env.get("PENDING_EXPIRES_AT", "0") or "0")
+    expires_at = str(env.get("PENDING_EXPIRES_AT", "0") or "0")
+    tz = env.get("TZ", "UTC")
+    dt = datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S %Z")
+    expires_at = int(dt.replace(tzinfo=ZoneInfo(tz)).timestamp())
 
     if not pending_email or not salt or not expected_hash:
         die("no pending notification email change")
